@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quản lý thư viện</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">THƯ VIỆN <span>QUẢN LÝ</span></a>
+    <span class="status"><i></i> Hệ thống hoạt động</span>
+  </header>
+
+  <main>
+    <div class="page-heading">
+      <div>
+        <p class="eyebrow">KHÔNG GIAN QUẢN TRỊ</p>
+        <h1>Danh mục thư viện</h1>
+      </div>
+      <div class="stats" aria-label="Tổng số bản ghi">
+        <div><strong><%= books.length %></strong><span>Sách</span></div>
+        <div><strong><%= readers.length %></strong><span>Độc giả</span></div>
+      </div>
+    </div>
+
+    <% if (error) { %>
+      <p class="alert" role="alert"><%= error %></p>
+    <% } %>
+
+    <section class="section" aria-labelledby="books-heading">
+      <div class="section-heading">
+        <div><p class="eyebrow">BỘ SƯU TẬP</p><h2 id="books-heading">Sách</h2></div>
+        <span class="count"><%= books.length %> mục</span>
+      </div>
+      <form class="create-form book-form" action="/books" method="post">
+        <label>Tên sách<input name="title" maxlength="200" required></label>
+        <label>Tác giả<input name="author" maxlength="160" required></label>
+        <label>ISBN<input name="isbn" maxlength="20" required></label>
+        <label>Năm<input name="published_year" type="number" min="0" max="2100"></label>
+        <label>Số bản<input name="available_copies" type="number" min="0" value="1" required></label>
+        <button type="submit">Thêm sách</button>
+      </form>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Tên sách</th><th>Tác giả</th><th>ISBN</th><th>Năm</th><th>Còn</th><th><span class="sr-only">Thao tác</span></th></tr></thead>
+          <tbody>
+            <% books.forEach((book) => { %>
+              <tr>
+                <td><input aria-label="Tên sách" form="book-<%= book.id %>" name="title" value="<%= book.title %>" required maxlength="200"></td>
+                <td><input aria-label="Tác giả" form="book-<%= book.id %>" name="author" value="<%= book.author %>" required maxlength="160"></td>
+                <td><input aria-label="ISBN" form="book-<%= book.id %>" name="isbn" value="<%= book.isbn %>" required maxlength="20"></td>
+                <td><input aria-label="Năm xuất bản" form="book-<%= book.id %>" name="published_year" type="number" min="0" max="2100" value="<%= book.published_year ?? '' %>"></td>
+                <td><input aria-label="Số bản còn" form="book-<%= book.id %>" name="available_copies" type="number" min="0" value="<%= book.available_copies %>" required></td>
+                <td class="actions">
+                  <form id="book-<%= book.id %>" action="/books/<%= book.id %>/update" method="post"><button class="secondary" type="submit">Lưu</button></form>
+                  <form action="/books/<%= book.id %>/delete" method="post"><button class="danger" type="submit" aria-label="Xóa sách <%= book.title %>">Xóa</button></form>
+                </td>
+              </tr>
+            <% }) %>
+            <% if (!books.length) { %><tr><td class="empty" colspan="6">Chưa có sách. Thêm đầu sách ở biểu mẫu phía trên.</td></tr><% } %>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="section" aria-labelledby="readers-heading">
+      <div class="section-heading">
+        <div><p class="eyebrow">THÀNH VIÊN</p><h2 id="readers-heading">Độc giả</h2></div>
+        <span class="count"><%= readers.length %> mục</span>
+      </div>
+      <form class="create-form reader-form" action="/readers" method="post">
+        <label>Họ và tên<input name="full_name" maxlength="160" required></label>
+        <label>Email<input name="email" type="email" maxlength="254" required></label>
+        <label>Điện thoại<input name="phone" maxlength="40"></label>
+        <button type="submit">Thêm độc giả</button>
+      </form>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Họ và tên</th><th>Email</th><th>Điện thoại</th><th><span class="sr-only">Thao tác</span></th></tr></thead>
+          <tbody>
+            <% readers.forEach((reader) => { %>
+              <tr>
+                <td><input aria-label="Họ và tên" form="reader-<%= reader.id %>" name="full_name" value="<%= reader.full_name %>" required maxlength="160"></td>
+                <td><input aria-label="Email" form="reader-<%= reader.id %>" name="email" type="email" value="<%= reader.email %>" required maxlength="254"></td>
+                <td><input aria-label="Điện thoại" form="reader-<%= reader.id %>" name="phone" value="<%= reader.phone %>" maxlength="40"></td>
+                <td class="actions">
+                  <form id="reader-<%= reader.id %>" action="/readers/<%= reader.id %>/update" method="post"><button class="secondary" type="submit">Lưu</button></form>
+                  <form action="/readers/<%= reader.id %>/delete" method="post"><button class="danger" type="submit" aria-label="Xóa độc giả <%= reader.full_name %>">Xóa</button></form>
+                </td>
+              </tr>
+            <% }) %>
+            <% if (!readers.length) { %><tr><td class="empty" colspan="4">Chưa có độc giả. Thêm thành viên ở biểu mẫu phía trên.</td></tr><% } %>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+  <footer>Hệ thống Quản lý Thư viện <span>·</span> Node.js + PostgreSQL</footer>
+</body>
+</html>
