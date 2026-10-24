@@ -46,6 +46,7 @@ services:
     networks:
       - frontend-network
       - backend-network
+      - monitoring-network
 
   pgadmin:
     image: dpage/pgadmin4:8
@@ -86,11 +87,92 @@ services:
     networks:
       - frontend-network
 
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    depends_on:
+      web:
+        condition: service_healthy
+    networks:
+      - monitoring-network
+
+  loki:
+    image: grafana/loki:3.2.1
+    restart: unless-stopped
+    user: "0"
+    ports:
+      - "127.0.0.1:3100:3100"
+    command:
+      - -config.file=/etc/loki/loki-config.yml
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki-data:/loki
+    networks:
+      - monitoring-network
+
+  promtail:
+    image: grafana/promtail:3.2.1
+    restart: unless-stopped
+    command:
+      - -config.file=/etc/promtail/promtail-config.yml
+    volumes:
+      - ./promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - promtail-positions:/var/lib/promtail
+    depends_on:
+      - loki
+    networks:
+      - monitoring-network
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-change-this-grafana-password}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+    depends_on:
+      - prometheus
+      - loki
+    networks:
+      - monitoring-network
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    restart: unless-stopped
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
+    networks:
+      - monitoring-network
+
 volumes:
   postgres-data:
   pgadmin-data:
+  prometheus-data:
+  loki-data:
+  promtail-positions:
+  grafana-data:
 
 networks:
   frontend-network:
   backend-network:
     internal: true
+  monitoring-network:

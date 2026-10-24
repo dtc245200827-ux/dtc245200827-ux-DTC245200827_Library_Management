@@ -1,10 +1,28 @@
 const express = require('express');
 const path = require('node:path');
 const { Pool } = require('pg');
+const { Counter, Histogram, Registry, collectDefaultMetrics } = require('prom-client');
 
 const app = express();
 const pool = new Pool();
 const port = Number(process.env.PORT || 3000);
+const metricsRegistry = new Registry();
+
+collectDefaultMetrics({ register: metricsRegistry, prefix: 'library_' });
+
+const httpRequestsTotal = new Counter({
+  name: 'library_http_requests_total',
+  help: 'Total number of HTTP requests handled by the library app.',
+  labelNames: ['method', 'route', 'status_code'],
+  registers: [metricsRegistry],
+});
+const httpRequestDuration = new Histogram({
+  name: 'library_http_request_duration_seconds',
+  help: 'HTTP request duration in seconds.',
+  labelNames: ['method', 'route', 'status_code'],
+  buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5],
+  registers: [metricsRegistry],
+});
 
 const resources = {
   books: {
@@ -34,6 +52,22 @@ app.set('views', path.join(__dirname, '..', 'views'));
 app.disable('x-powered-by');
 app.use(express.urlencoded({ extended: false, limit: '20kb' }));
 app.use(express.static(path.join(__dirname, '..', 'public'), { maxAge: '1h' }));
+app.use((request, response, next) => {
+  if (request.path === '/metrics') return next();
+
+  const stopTimer = httpRequestDuration.startTimer();
+  response.on('finish', () => {
+    const route = request.route ? `${request.baseUrl}${request.route.path}` : 'unmatched';
+    const labels = {
+      method: request.method,
+      route,
+      status_code: String(response.statusCode),
+    };
+    httpRequestsTotal.inc(labels);
+    stopTimer(labels);
+  });
+  return next();
+});
 
 function asyncRoute(handler) {
   return (request, response, next) => Promise.resolve(handler(request, response, next)).catch(next);
@@ -56,6 +90,14 @@ function getValues(request, resource) {
 }
 
 app.get('/health', (request, response) => response.json({ status: 'ok' }));
+app.get('/metrics', async (request, response, next) => {
+  try {
+    response.set('Content-Type', metricsRegistry.contentType);
+    response.end(await metricsRegistry.metrics());
+  } catch (error) {
+    next(error);
+  }
+});
 
 app.get('/', asyncRoute(async (request, response) => {
   const [books, readers] = await Promise.all([

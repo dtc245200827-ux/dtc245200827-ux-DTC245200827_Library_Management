@@ -15,6 +15,10 @@
 |-- nginx/
 |   |-- Dockerfile
 |   `-- default.conf
+|-- prometheus/prometheus.yml
+|-- loki/loki-config.yml
+|-- promtail/promtail-config.yml
+|-- grafana/provisioning/datasources/prometheus.yml
 |-- postgres/init.sql
 |-- docker-compose.yml
 |-- .env.example
@@ -24,7 +28,7 @@
 ## Yêu cầu
 
 - Docker Desktop hoặc Docker Engine kèm Docker Compose v2.
-- Cổng `443` và `5050` không được ứng dụng khác sử dụng.
+- Các cổng `443`, `5050` và `3000` không được ứng dụng khác sử dụng.
 
 ## Chạy ứng dụng
 
@@ -46,6 +50,35 @@
 
 	- Ứng dụng: <https://localhost> (trình duyệt sẽ cảnh báo vì chứng chỉ tự ký; chỉ chấp nhận cảnh báo trong môi trường phát triển này).
 	- pgAdmin: <http://localhost:5050>, đăng nhập bằng `PGADMIN_DEFAULT_EMAIL` và `PGADMIN_DEFAULT_PASSWORD` trong `.env`.
+	- Grafana: <http://localhost:3000>, đăng nhập bằng `GRAFANA_ADMIN_USER` và `GRAFANA_ADMIN_PASSWORD` trong `.env`. Nguồn dữ liệu Prometheus và Loki được cấu hình tự động.
+
+Prometheus thu thập metrics từ ứng dụng (`web:3000/metrics`) và cAdvisor (`cadvisor:8080`). Endpoint `/metrics` chỉ dùng trên `monitoring-network` và bị chặn qua Nginx công khai. cAdvisor thu thập CPU/RAM của container từ Docker host; trên Docker Desktop, dữ liệu phản ánh môi trường Linux VM của Docker.
+
+## Truy vấn log với Loki
+
+Promtail đọc log JSON của các Docker container (trừ chính Promtail để tránh tự thu thập lặp), gắn nhãn `container`, `service`, `compose_project` và `stream`, rồi gửi đến Loki. Loki lưu log trong 30 ngày. Trong Grafana, mở **Explore**, chọn datasource **Loki**, đặt khoảng thời gian phù hợp và chạy một trong các truy vấn LogQL sau:
+
+Loki API có thể truy cập tại <http://localhost:3100> trên máy host; Grafana và Promtail dùng địa chỉ nội bộ `http://loki:3100` trong `monitoring-network`.
+
+```logql
+{service="web"}
+```
+
+Hiển thị log của container ứng dụng web.
+
+```logql
+{service="web"} |~ "(?i)error"
+```
+
+Lọc các dòng log có chứa `error` không phân biệt chữ hoa/chữ thường.
+
+```logql
+sum by (service) (rate({service=~".+"}[5m]))
+```
+
+Đếm tốc độ log theo service, tính trung bình trên cửa sổ 5 phút (dòng log/giây). Có thể đổi `5m` thành khoảng thời gian khác.
+
+Trên Linux, Promtail mount `/var/lib/docker/containers` từ Docker host ở chế độ chỉ đọc. Trên Docker Desktop, cần bảo đảm Docker daemon có thể mount được thư mục này; nếu thư mục log container không khả dụng trong môi trường Desktop, cần dùng cơ chế chia sẻ log tương ứng với cấu hình Docker Desktop trước khi chạy Promtail.
 
 Trong pgAdmin, đăng ký server với host `postgres`, port `5432`, database `library`, username/password theo `POSTGRES_USER` và `POSTGRES_PASSWORD` trong `.env`. Không dùng `localhost` làm host database bên trong container.
 
@@ -57,7 +90,7 @@ Trang chính có biểu mẫu tạo sách/độc giả, biểu mẫu cập nhậ
 
 ```sh
 docker compose ps
-docker compose logs -f web nginx postgres pgadmin
+docker compose logs -f web nginx postgres pgadmin prometheus grafana cadvisor
 docker compose down
 ```
 
